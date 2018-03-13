@@ -76,11 +76,11 @@ int main() {
     exit(2);
   }
 
-  // Listen at this address
+  // Listen at this address. We'll bind to port 0 to accept any available port
   struct sockaddr_in addr = {
     .sin_addr.s_addr = INADDR_ANY,
     .sin_family = AF_INET,
-    .sin_port = htons(4444)
+    .sin_port = htons(0)
   };
 
   // Bind to the specified address
@@ -91,6 +91,13 @@ int main() {
 
   // Become a server socket
   listen(s, 2);
+  
+  // Get the listening socket info so we can find out which port we're using
+  socklen_t addr_size = sizeof(struct sockaddr_in);
+  getsockname(s, (struct sockaddr *) &addr, &addr_size);
+  
+  // Print the port information
+  printf("Listening on port %d\n", ntohs(addr.sin_port));
   
   int client_count = 0;
 
