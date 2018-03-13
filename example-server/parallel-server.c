@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 typedef struct thread_arg {
   int socket_fd;
@@ -100,7 +101,10 @@ int main() {
     socklen_t client_addr_len = sizeof(struct sockaddr_in);
     int client_socket = accept(s, (struct sockaddr*)&client_addr, &client_addr_len);
     
-    printf("Client %d connected\n", client_count);
+    char ipstr[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &client_addr.sin_addr, ipstr, INET_ADDRSTRLEN);
+    
+    printf("Client %d connected from %s\n", client_count, ipstr);
     
     // Set up arguments for the client thread
     thread_arg_t* args = malloc(sizeof(thread_arg_t));
