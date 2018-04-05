@@ -48,39 +48,41 @@ client_node_t* create_client_node(){
 
 //List of possible parents
 client_list_t* return_list_clients(){
-	if (cur_num_clients == 0){
-		dir_list->head = NULL;
-		dir_list->cur_num_clients = 0;
-	}
 	return dir_list;
+}
+
+void print_list(client_node_t* cur) {
+	while(cur != NULL) {
+	printf("cid: %d\n", (int) cur->cid);
+	cur = cur->next;
+	}
 }
 
 
 //Remove the client that wants to exit from the system
 void update_directory_server(size_t cid){
-	if (dir_list->head == NULL) {
-		return;
-	}
 
 	client_node_t* cur = dir_list->head;
-	client_node_t* prev = dir_list->head;
+	client_node_t* prev = cur;
+
+	while(cur != NULL) {
 
 	if(cur->cid == cid) {
-   dir_list->head = prev->next;
-   free(prev);
-	}
-
-	while(cur->next != NULL || cur->next->cid != cid) {
-		prev = cur;
-		cur = cur->next;
-	}
-
-	if (cur->next == NULL){
-		return;
-	}
-
-	prev = cur->next;
+	
+	if(cur == dir_list->head) {
+	dir_list->head = cur->next;
 	free(cur);
+	return;
+	}
+
+	prev->next = cur->next;
+	free(cur);
+	return;
+	}
+	prev = cur;
+	cur = cur->next;
+}
+
 }
 
 int main(int argc, char const *argv[])
@@ -88,8 +90,27 @@ int main(int argc, char const *argv[])
 
 	dir_list = malloc (sizeof (client_list_t));
 	dir_list->head = NULL;
+	
+	client_node_t* cur = dir_list->head;
+	client_node_t* prev = dir_list->head;
 
-		//creates a socket
+ for(int i = 0; i < 5; i++) {
+	if(cur == NULL) {
+	cur = create_client_node();
+	dir_list->head = cur;
+	prev = cur;
+	} else {
+	
+	cur = create_client_node();
+	prev->next = cur;
+	prev = cur;
+	}
+	cur->cid = i;
+}
+
+
+
+	//creates a socket
 	int s = socket(AF_INET, SOCK_STREAM, 0);
 
 	//check if it fails to create
@@ -125,10 +146,8 @@ int main(int argc, char const *argv[])
 	  perror("accept failed");
 	  exit(2);
 	}
-
 	
-
-		return 0;
+		return 0; 
 	}
 
 
