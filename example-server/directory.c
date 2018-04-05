@@ -39,7 +39,7 @@ size_t cid;
 client_list_t* dir_list;
 
 
-client_node_t* create_client_node(size_t cid, int client_num, char ipstr[], size_t port){
+client_node_t* create_client_node(size_t cid, int client_num, char* ipstr, size_t port){
 	
 	client_node_t * new_node = malloc (sizeof(client_node_t));
 	
@@ -49,7 +49,7 @@ client_node_t* create_client_node(size_t cid, int client_num, char ipstr[], size
 
 	new_node->cid = cid;
 	new_node->client_num = client_num;
-	new_node->ipstr = ipstr;
+	strcpy(new_node->ipstr, ipstr);
 	new_node->port = port;
 
 	return new_node;
@@ -63,7 +63,7 @@ client_list_t* return_list_clients(){
 
 void print_list(client_node_t* cur) {
 	while(cur != NULL) {
-	printf("cid: %d\n", (int) cur->cid);
+	printf("cid: %d %s\n", (int) cur->cid, cur->ipstr);
 	cur = cur->next;
 	}
 }
@@ -120,20 +120,13 @@ int main(int argc, char const *argv[])
 	client_node_t* prev = dir_list->head;
 
  for(int i = 0; i < 5; i++) {
-	if(cur == NULL) {
-	cur = create_client_node();
-	dir_list->head = cur;
-	prev = cur;
-	} else {
-	
-	cur = create_client_node();
-	prev->next = cur;
-	prev = cur;
-	}
-	cur->cid = i;
+ 	char c[2] = "a";
+	append_node(create_client_node(i, 0, c, 12));
 }
 
-	//creates a socket
+	print_list(dir_list->head);
+
+/*	//creates a socket
 	int s = socket(AF_INET, SOCK_STREAM, 0);
 
 	//check if it fails to create
@@ -169,7 +162,7 @@ int main(int argc, char const *argv[])
 	  perror("accept failed");
 	  exit(2);
 	}
-	
+	*/
 		return 0; 
 	}
 
