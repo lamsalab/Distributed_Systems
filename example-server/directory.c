@@ -14,8 +14,10 @@
 We need List structure that holds information about the clients.
 Each client can be a node in a linked list which holds the information
 about the cline including its IP address and its listening port.
-
 */
+#define CLIENT_JOIN = 0;
+#define REQUEST_NEW_PEERS = 1;
+#define CLIENT_EXIT = 2;
 
 
 typedef struct client_node
@@ -37,11 +39,19 @@ size_t cid;
 client_list_t* dir_list;
 
 
-client_node_t* create_client_node(){
+client_node_t* create_client_node(size_t cid, int client_num, char ipstr[], size_t port){
+	
 	client_node_t * new_node = malloc (sizeof(client_node_t));
+	
 	if (new_node == NULL){
 		perror("Malloc failed!");
 	}
+
+	new_node->cid = cid;
+	new_node->client_num = client_num;
+	new_node->ipstr = ipstr;
+	new_node->port = port;
+
 	return new_node;
 }
 
@@ -58,6 +68,21 @@ void print_list(client_node_t* cur) {
 	}
 }
 
+void append_node(client_node_t* node) {
+	client_node_t* cur = dir_list->head;
+
+		//if the list is empty, just put in front
+		if(cur == NULL) {
+			dir_list->head = node;
+			return;
+		}
+
+		//otherwise traverse and add node at the end
+		while(cur->next != NULL) {
+			cur = cur->next;
+		}
+		cur->next = node;
+}
 
 //Remove the client that wants to exit from the system
 void update_directory_server(size_t cid){
@@ -107,8 +132,6 @@ int main(int argc, char const *argv[])
 	}
 	cur->cid = i;
 }
-
-
 
 	//creates a socket
 	int s = socket(AF_INET, SOCK_STREAM, 0);
