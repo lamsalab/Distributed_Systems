@@ -23,8 +23,8 @@ about the cline including its IP address and its listening port.
 typedef struct client_node
 {
 	struct client_node * next;
-	size_t cid;
-	int client_num;
+	size_t cid; //client ID
+	int client_num; //TODO DO WE REALLY NEED THIS FIELD
 	char ipstr[INET_ADDRSTRLEN]; //holds ip address of client
 	size_t port; //holds listening port for client
 } client_node_t;
@@ -34,11 +34,10 @@ typedef struct client_list {
 	int cur_num_clients;
 } client_list_t;
 
-int cur_num_clients;
-size_t cid;
-client_list_t* dir_list;
+int cur_num_clients; //provides unique IDs for our clients
+client_list_t* dir_list; //directory
 
-
+//Creates a new client node
 client_node_t* create_client_node(size_t cid, int client_num, char* ipstr, size_t port){
 	
 	client_node_t * new_node = malloc (sizeof(client_node_t));
@@ -56,7 +55,7 @@ client_node_t* create_client_node(size_t cid, int client_num, char* ipstr, size_
 }
 
 
-//List of possible parents
+//Returns a linked list of client nodes
 client_list_t* return_list_clients(){
 	return dir_list;
 }
@@ -68,6 +67,7 @@ void print_list(client_node_t* cur) {
 	}
 }
 
+//Adds a client node to end our dir_list
 void append_node(client_node_t* node) {
 	client_node_t* cur = dir_list->head;
 
@@ -84,7 +84,7 @@ void append_node(client_node_t* node) {
 		cur->next = node;
 }
 
-//Remove the client that wants to exit from the system
+//Removes the client that wants to exit 
 void update_directory_server(size_t cid){
 
 	client_node_t* cur = dir_list->head;
@@ -92,14 +92,17 @@ void update_directory_server(size_t cid){
 
 	while(cur != NULL) {
 
+	//if we find the client id we want to delete
 	if(cur->cid == cid) {
 	
+	//if it is the head, handle the special case
 	if(cur == dir_list->head) {
 	dir_list->head = cur->next;
 	free(cur);
 	return;
 	}
 
+	//otherwise handle the normal case
 	prev->next = cur->next;
 	free(cur);
 	return;
