@@ -14,17 +14,20 @@
 We need List structure that holds information about the clients.
 Each client can be a node in a linked list which holds the information
 about the cline including its IP address and its listening port.
-*/
-#define CLIENT_JOIN = 0;
-#define REQUEST_NEW_PEERS = 1;
-#define CLIENT_EXIT = 2;
 
+*/
+
+typedef enum {
+	CLIENT_JOIN,
+	REQUEST_NEW_PEER,
+	CLIENT_EXIT
+} request_t;
 
 typedef struct client_node
 {
 	struct client_node * next;
-	size_t cid; //client ID
-	int client_num; //TODO DO WE REALLY NEED THIS FIELD
+	size_t cid;
+	int client_num;
 	char ipstr[INET_ADDRSTRLEN]; //holds ip address of client
 	size_t port; //holds listening port for client
 } client_node_t;
@@ -34,83 +37,63 @@ typedef struct client_list {
 	int cur_num_clients;
 } client_list_t;
 
-int cur_num_clients; //provides unique IDs for our clients
-client_list_t* dir_list; //directory
+typedef struct packet
+{
+	request_t request;
+	size_t client_id;
+	size_t port;
+}info_packet_t;
 
-//Creates a new client node
-client_node_t* create_client_node(size_t cid, int client_num, char* ipstr, size_t port){
-	
+
+int cur_num_clients;
+size_t cid;
+client_list_t* dir_list;
+
+
+client_node_t* create_client_node(){
 	client_node_t * new_node = malloc (sizeof(client_node_t));
-	
 	if (new_node == NULL){
 		perror("Malloc failed!");
 	}
-
-	new_node->cid = cid;
-	new_node->client_num = client_num;
-	strcpy(new_node->ipstr, ipstr);
-	new_node->port = port;
-
 	return new_node;
 }
 
 
-//Returns a linked list of client nodes
+//List of possible parents
 client_list_t* return_list_clients(){
+	if (cur_num_clients == 0){
+		dir_list->head = NULL;
+		dir_list->cur_num_clients = 0;
+	}
 	return dir_list;
 }
 
-void print_list(client_node_t* cur) {
-	while(cur != NULL) {
-	printf("cid: %d %s\n", (int) cur->cid, cur->ipstr);
-	cur = cur->next;
-	}
-}
 
-//Adds a client node to end our dir_list
-void append_node(client_node_t* node) {
-	client_node_t* cur = dir_list->head;
-
-		//if the list is empty, just put in front
-		if(cur == NULL) {
-			dir_list->head = node;
-			return;
-		}
-
-		//otherwise traverse and add node at the end
-		while(cur->next != NULL) {
-			cur = cur->next;
-		}
-		cur->next = node;
-}
-
-//Removes the client that wants to exit 
+//Remove the client that wants to exit from the system
 void update_directory_server(size_t cid){
+	if (dir_list->head == NULL) {
+		return;
+	}
 
 	client_node_t* cur = dir_list->head;
-	client_node_t* prev = cur;
+	client_node_t* prev = dir_list->head;
 
-	while(cur != NULL) {
-
-	//if we find the client id we want to delete
 	if(cur->cid == cid) {
-	
-	//if it is the head, handle the special case
-	if(cur == dir_list->head) {
-	dir_list->head = cur->next;
-	free(cur);
-	return;
+   dir_list->head = prev->next;
+   free(prev);
 	}
 
-	//otherwise handle the normal case
-	prev->next = cur->next;
-	free(cur);
-	return;
+	while(cur->next != NULL || cur->next->cid != cid) {
+		prev = cur;
+		cur = cur->next;
 	}
-	prev = cur;
-	cur = cur->next;
-}
 
+	if (cur->next == NULL){
+		return;
+	}
+
+	prev = cur->next;
+	free(cur);
 }
 
 int main(int argc, char const *argv[])
@@ -118,18 +101,9 @@ int main(int argc, char const *argv[])
 
 	dir_list = malloc (sizeof (client_list_t));
 	dir_list->head = NULL;
-	
-	client_node_t* cur = dir_list->head;
-	client_node_t* prev = dir_list->head;
 
- for(int i = 0; i < 5; i++) {
- 	char c[2] = "a";
-	append_node(create_client_node(i, 0, c, 12));
-}
 
-	print_list(dir_list->head);
-
-/*	//creates a socket
+	//creates a socket
 	int s = socket(AF_INET, SOCK_STREAM, 0);
 
 	//check if it fails to create
@@ -165,8 +139,19 @@ int main(int argc, char const *argv[])
 	  perror("accept failed");
 	  exit(2);
 	}
-	*/
-		return 0; 
+ 	 
+	//Check if the client sent the information correctly
+
+
+	info_packet_t packet_info;
+
+	if (recv(client_socket, &packet_info, sizeof(packet_info), 0) < 0){
+        perror("There was a problem in reading the data");
+        exit(2);
+	}
+
+	printf("%d\n", (int)packet_info.port);
+	return 0; 
 	}
 
 
