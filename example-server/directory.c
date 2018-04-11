@@ -44,7 +44,6 @@ typedef struct packet
 	size_t port;
 }info_packet_t;
 
-
 int cur_num_clients;
 size_t cid;
 client_list_t* dir_list;
@@ -102,7 +101,6 @@ int main(int argc, char const *argv[])
 	dir_list = malloc (sizeof (client_list_t));
 	dir_list->head = NULL;
 
-
 	//creates a socket
 	int s = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -116,7 +114,7 @@ int main(int argc, char const *argv[])
 	struct sockaddr_in addr;
 	addr.sin_addr.s_addr = INADDR_ANY;
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(4443);
+	addr.sin_port = htons(4445);
 
 	//bind socket to address
 	if(bind(s, (struct sockaddr*)&addr, sizeof(struct sockaddr_in))) {
@@ -129,17 +127,22 @@ int main(int argc, char const *argv[])
 	  perror("listen failed");
 	  exit(2);
 	}
+        printf("connected\n");
 
+        
 	//accept an incoming connection
 	struct sockaddr_in client_addr;
 	socklen_t client_addr_length = sizeof(struct sockaddr_in);
-	int client_socket = accept(s, (struct sockaddr*)&client_addr, &client_addr_length);
+	int client_socket = accept(s, (struct sockaddr*)&client_addr,
+                                   &client_addr_length);
 
 	if(client_socket == -1) {
 	  perror("accept failed");
 	  exit(2);
 	}
- 	 
+
+    
+ 	 printf("connected\n");
 	//Check if the client sent the information correctly
 
 
@@ -150,7 +153,10 @@ int main(int argc, char const *argv[])
         exit(2);
 	}
 
+        printf("received");
+
 	printf("%d\n", (int)packet_info.port);
+        close(s);
 	return 0; 
 	}
 
