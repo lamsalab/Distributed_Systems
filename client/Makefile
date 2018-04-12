@@ -7,4 +7,4 @@ clean:
 	rm -f client
 
 client: client.c ui.c ui.h
-	$(CC) $(CFLAGS) -o client client.c ui.c -lncurses -pthread
+	$(CC) $(CFLAGS) -o client client.c ui.c -lncurses -pthread 
