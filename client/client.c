@@ -8,25 +8,27 @@
 
 #include "ui.h"
 
+//Request types
 typedef enum {
 	CLIENT_JOIN,
 	REQUEST_NEW_PEER,
 	CLIENT_EXIT
 } request_t;
 
-
+//Transmission data packet
 typedef struct packet
 {
 	request_t request;
 	size_t client_id;
 	size_t port;
-}info_packet_t;
+} info_packet_t;
 
 typedef struct _client_thread_args {
   int s;
 } client_thread_args_t;
 
-void * client_fn(void * arg) {
+
+void* client_fn(void* arg) {
   while (1) {
     //accept an incoming connection
     client_thread_args_t* real_args = (client_thread_args_t*)arg;
@@ -65,15 +67,9 @@ int main(int argc, char** argv) {
 
   struct sockaddr_in addr = {
     .sin_family = AF_INET,
-    .sin_port = htons(4445)
+    .sin_port = htons(4446)
   };
-  /*
-  //bind socket to address
-  if(bind(s, (struct sockaddr*)&addr, sizeof(struct sockaddr_in))) {
-    perror("bind failed");
-    exit(2);
-  }
-  */
+  
 
   bcopy((char*)server->h_addr, (char*)&addr.sin_addr.s_addr, server->h_length);
 
@@ -82,21 +78,17 @@ int main(int argc, char** argv) {
     exit(2);
   }
 
-  request_t request = CLIENT_JOIN;
+request_t request = CLIENT_EXIT;
 
-  info_packet_t *packet = malloc(sizeof(info_packet_t));
-  
-  packet->request = request;
-  packet->port = 4444;
-  // {
-  // .request = request,
-  // .port = 4445
-  //};
+info_packet_t packet = 
+   {
+   .request = request,
+   .port = 4445
+  };
 
-  //send(s,(void *)packet, sizeof(packet), 0);
+  send(s,(void *)&packet, sizeof(packet), 0);
 
-
-  pthread_t client_thread;
+ /* pthread_t client_thread;
   client_thread_args_t args_client;
   args_client.s = s;
 
@@ -106,10 +98,10 @@ int main(int argc, char** argv) {
     exit(2);
   }
 
-  pthread_join(client_thread, NULL);
+  pthread_join(client_thread, NULL); */
 
   // Initialize the chat client's user interface.
-  ui_init();
+ /* ui_init();
   
   // Add a test message
   ui_add_message(NULL, "Type your message and hit <ENTER> to post.");
@@ -132,7 +124,7 @@ int main(int argc, char** argv) {
   }
   
   // Clean up the UI
-  ui_shutdown();
+  ui_shutdown(); */
   
   return 0;
 }
