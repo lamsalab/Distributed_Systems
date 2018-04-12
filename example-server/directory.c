@@ -123,12 +123,8 @@ void init_list() {
 	dir_list->head = NULL;
 }
 
-int main(int argc, char const *argv[])
-{
-
-	init_list();
-
-/*	//creates a socket
+int setup_server() {
+	//creates a socket
 	int s = socket(AF_INET, SOCK_STREAM, 0);
 
 	//check if it fails to create
@@ -141,7 +137,7 @@ int main(int argc, char const *argv[])
 	struct sockaddr_in addr;
 	addr.sin_addr.s_addr = INADDR_ANY;
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(4445);
+	addr.sin_port = htons(4446);
 
 	//bind socket to address
 	if(bind(s, (struct sockaddr*)&addr, sizeof(struct sockaddr_in))) {
@@ -154,38 +150,40 @@ int main(int argc, char const *argv[])
 	  perror("listen failed");
 	  exit(2);
 	}
-        printf("connected\n");
 
-        
+    return s;
+}
+
+int main(int argc, char const *argv[]) {
+
+	init_list();
+	int s = setup_server();
+
 	//accept an incoming connection
 	struct sockaddr_in client_addr;
 	socklen_t client_addr_length = sizeof(struct sockaddr_in);
-	int client_socket = accept(s, (struct sockaddr*)&client_addr,
-                                   &client_addr_length);
+	int client_socket = accept(s, (struct sockaddr*)&client_addr, &client_addr_length);
 
 	if(client_socket == -1) {
 	  perror("accept failed");
 	  exit(2);
 	}
 
-    
- 	 printf("connected\n");
-	//Check if the client sent the information correctly
-
-
+ 	//Get the client information from the connecting client node
 	info_packet_t packet_info;
-
-	if (recv(client_socket, &packet_info, sizeof(packet_info), 0) < 0){
-        perror("There was a problem in reading the data");
+	if (recv(client_socket, (info_packet_t*) &packet_info, sizeof(packet_info), 0) < 0){
+        perror("There was a problem in reading the data\n");
         exit(2);
 	}
 
-        printf("received");
+	if(packet_info.request == CLIENT_JOIN) {
+		printf("Request type: CLIENT_JOIN\n");
+	}
+	printf("Port number is %d\n", (int)packet_info.port);
+        
+    close(s);
 
-	printf("%d\n", (int)packet_info.port);
-        close(s);
-
-        */
+       
 	return 0; 
 }
 
