@@ -35,7 +35,6 @@ typedef struct client_list {
   int cur_num_clients;
 } client_list_t;
 
-
 //Transmitted data packet
 typedef struct packet
 {
@@ -48,11 +47,22 @@ typedef struct packet
 //List of potential parents for new clients
 typedef struct parent_list
 {
-  client_list_t *parents;
-}parent_list_t;
+  int num_clients;
+  client_node_t* potential_clients;
+
+} parent_list_t;
+
+typedef struct server_info
+{
+	int list_size;
+} server_info_t;
 
 int cur_num_clients = 0;  //tracks unique ids for clients
 client_list_t* dir_list;
+int list_size = 0;
+
+//create parents list array
+client_node_t potential_clients[4];
 
 
 //Creates a new empty client node
@@ -65,6 +75,7 @@ client_node_t* create_client_node(info_packet_t * client_packet){
   new_node->cid = cur_num_clients++;
   new_node->port = client_packet->port;
   strcpy(new_node->ipstr, client_packet->ipstr);
+  printf("ASSIGNED CID: %d", (int) new_node->cid);
   return new_node;
 }
 
@@ -78,6 +89,7 @@ void append_node(client_node_t* node) {
 
   if(dir_list->head == NULL) {
     dir_list->head = node;
+      ++list_size;
     return;
   }
 
@@ -88,7 +100,48 @@ void append_node(client_node_t* node) {
     cur = cur->next;
   }  
 
-  cur->next  = node; 
+  cur->next  = node;
+  ++list_size;
+}
+
+int accept_incoming_connection(int server_socket) {
+
+//accept an incoming connection
+  struct sockaddr_in client_addr;
+  socklen_t client_addr_length = sizeof(struct sockaddr_in);
+  int client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_addr_length);
+
+  if(client_socket == -1) {
+    perror("accept failed");
+    exit(2);
+  }
+
+  return client_socket;
+}
+
+void send_all_parents_list(int client_socket) {
+
+ //create parents list array
+ //client_node_t potential_clients[3];
+ memset(potential_clients, 0, sizeof(potential_clients));
+
+ //add all the clients from linked list to this array
+ client_node_t* cur = dir_list->head;
+
+ int i = 0;
+ while(cur != NULL) {
+ 	potential_clients[i++] = *cur;
+	cur = cur->next;
+ }
+
+ parent_list_t parents_list;
+ parents_list.num_clients = list_size,
+ parents_list.potential_clients = malloc (parents_list.num_clients * sizeof(client_node_t));
+ memmove(parents_list.potential_clients, &potential_clients, sizeof(potential_clients));
+
+  //Send the array to the client
+  send(client_socket,(void *) &parents_list, sizeof(parent_list_t), 0);
+
 }
 
 
@@ -116,7 +169,6 @@ void update_directory_server(size_t cid){
   client_node_t* prev = dir_list->head;
 
   while(cur != NULL) {
-
     //if we find the cid we are looking for, just change the pointers
     if(cur->cid == cid) {
       if(cur == dir_list->head) { 
@@ -125,9 +177,9 @@ void update_directory_server(size_t cid){
         //otherwise delete normally
         prev->next = cur->next;
       }
+      --list_size;
       return;
     }
-
     //otherwise, keep traversing
     prev = cur;
     cur = cur->next;
@@ -174,16 +226,7 @@ int main(int argc, char const *argv[]) {
 
   init_list();     
   int s = setup_server();
-
-  //accept an incoming connection
-  struct sockaddr_in client_addr;
-  socklen_t client_addr_length = sizeof(struct sockaddr_in);
-  int client_socket = accept(s, (struct sockaddr*)&client_addr, &client_addr_length);
-
-  if(client_socket == -1) {
-    perror("accept failed");
-    exit(2);
-  }
+  int client_socket = accept_incoming_connection(s);
 
   //Get the client information from the connecting client node
   info_packet_t packet_info;
@@ -192,28 +235,26 @@ int main(int argc, char const *argv[]) {
     exit(2);
   }
 
+  //handle the appropriate request from the client node
   switch (packet_info.request){
   case CLIENT_JOIN:
     //Add the clients;
     append_node(create_client_node(&packet_info));
+    append_node(create_client_node(&packet_info));
+    append_node(create_client_node(&packet_info));
+    append_node(create_client_node(&packet_info));
+    send_all_parents_list(client_socket);
     break;
   case REQUEST_NEW_PEER:
     ;//New parents;
   case CLIENT_EXIT:
     ;//Update the list
-  }
+  } 
 
-  client_list_t parent_list = *dir_list;
-  print_list(&parent_list);
+  printf("I am out of switch");
 
-  parent_list = *dir_list;
-  
-
-  
-  //Send the packet to the client
-  send(client_socket,(void *)&parent_list, sizeof(client_list_t), 0);
-        
-  close(s);
+  //close(client_socket);      
+  //close(s);
 
        
   return 0; 
