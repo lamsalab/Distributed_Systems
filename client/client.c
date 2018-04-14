@@ -7,10 +7,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <limits.h>
 
 #include "ui.h"
 
 #define SERVER_PORT 6666
+
 
 //Request types
 typedef enum {
@@ -47,6 +49,14 @@ typedef struct client_node
 typedef struct client_list {
   client_node_t * head; //pointer to list of client nodes
 } client_list_t;
+
+//List of potential parents for new clients
+typedef struct parent_list
+{
+  int num_clients;
+  client_node_t* potential_clients;
+
+} parent_list_t;
 
 
 
@@ -161,13 +171,21 @@ int main(int argc, char** argv) {
 //Send the packet to the server
   send(s_server,(void *)&packet, sizeof(packet), 0);
 
-  client_list_t potential_parents;
+ // client_node_t potential_parents[3];
+ parent_list_t parents_list;
   //Get the client information from the connecting client node
-  if (recv(s_server, (client_list_t*) &potential_parents, sizeof(potential_parents), 0) < 0){
+
+  if (recv(s_server, (parent_list_t*) &parents_list, sizeof(parent_list_t), 0) < 0){
     perror("There was a problem in reading the data\n");
     exit(2);
   }
-  print_list(&potential_parents);
+
+  printf("size of list: %d\n", parents_list.num_clients);
+  for (int i = 0; i < parents_list.num_clients; i++){
+   //   printf("size of list: %d\n", parents_list.num_clients);
+    printf("%zu\n", parents_list.potential_clients[i].cid);
+  }
+  //print_list(&potential_parents);
 
   /* pthread_t client_thread;
      client_thread_args_t args_client;
