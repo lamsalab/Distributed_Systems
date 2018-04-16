@@ -11,7 +11,9 @@
 
 #include "ui.h"
 
-#define SERVER_PORT 6666
+#define SERVER_PORT 6662
+
+int client_id = 0; //default client id
 
 
 //Request types
@@ -51,12 +53,10 @@ typedef struct client_list {
 } client_list_t;
 
 //List of potential parents for new clients
-typedef struct parent_list
+typedef struct server_info
 {
   int num_clients;
-  client_node_t* potential_clients;
-
-} parent_list_t;
+} server_info_t;
 
 
 
@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
 
   //Packet to be sent to the server
   info_packet_t packet;
-  packet.request = CLIENT_JOIN;
+  packet.request = REQUEST_NEW_PEER;
   packet.port = port_no;
   strcpy(packet.ipstr, ipstr);
 
@@ -172,19 +172,27 @@ int main(int argc, char** argv) {
   send(s_server,(void *)&packet, sizeof(packet), 0);
 
  // client_node_t potential_parents[3];
- parent_list_t parents_list;
+ server_info_t server_info;
   //Get the client information from the connecting client node
-
-  if (recv(s_server, (parent_list_t*) &parents_list, sizeof(parent_list_t), 0) < 0){
+  if (recv(s_server, (server_info_t*) &server_info, sizeof(server_info_t), 0) < 0){
     perror("There was a problem in reading the data\n");
     exit(2);
   }
 
-  printf("size of list: %d\n", parents_list.num_clients);
-  for (int i = 0; i < parents_list.num_clients; i++){
-   //   printf("size of list: %d\n", parents_list.num_clients);
-    printf("%zu\n", parents_list.potential_clients[i].cid);
+int num_clients = server_info.num_clients;
+
+ client_node_t potential_clients[num_clients];
+
+  //Get the client information from the connecting client node
+  if (recv(s_server, (client_node_t*) &potential_clients, sizeof(potential_clients), 0) < 0){
+    perror("There was a problem in reading the data\n");
+    exit(2);
   }
+
+  for(int i = 0; i < num_clients; i++){
+    printf("port number: %d\n", (int) potential_clients[i].port);
+  }
+
   //print_list(&potential_parents);
 
   /* pthread_t client_thread;
