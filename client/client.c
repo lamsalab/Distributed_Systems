@@ -216,9 +216,9 @@ client_id = server_info.cid;
 
   //Getting the host name for the server
   struct hostent* parent_server;
-  parent_server = gethostbyname();
+  parent_server = gethostbyname(ipstr);
   if(parent_server == NULL) {
-    fprintf(stderr, "Unable to find host %s\n", argv[2]);
+    fprintf(stderr, "Unable to find host %s\n", ipstr);
     exit(1);
   }
 
