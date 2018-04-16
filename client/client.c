@@ -13,7 +13,7 @@
 
 #define SERVER_PORT 6662
 
-int client_id = 0; //default client id
+ size_t client_id = 0; //default client id
 
 
 //Request types
@@ -56,6 +56,7 @@ typedef struct client_list {
 typedef struct server_info
 {
   int num_clients;
+  size_t cid;
 } server_info_t;
 
 
@@ -69,10 +70,9 @@ void* client_fn(void* arg) {
     socklen_t client_addr_length = sizeof(struct sockaddr_in);
     int client_socket = accept(s, (struct sockaddr*)&client_addr,
                                &client_addr_length);
-    printf("hello");
+  }
     void * output;
     return output;
-  }
 }
 
 //Prints the cids of all the clients in our list (Only for testing purposes)
@@ -110,14 +110,18 @@ int main(int argc, char** argv) {
   //Assigns random port
   struct sockaddr_in client_addr = {
     .sin_family = AF_INET,
-    .sin_port = 0
+    .sin_port = htons(0)
   };
+
+  
 
   //bind socket to address
   if(bind(s_client, (struct sockaddr*)&client_addr, sizeof(struct sockaddr_in))) {
     perror("bind failed");
     exit(2);
   }
+
+  printf("parent port: %d\n", client_addr.sin_port);
 
   //Got the idea from https://stackoverflow.com/questions/4046616/sockets-how-to-find-out-what-port-and-address-im-assigned
   //Get the port no.
@@ -164,7 +168,7 @@ int main(int argc, char** argv) {
 
   //Packet to be sent to the server
   info_packet_t packet;
-  packet.request = REQUEST_NEW_PEER;
+  packet.request = CLIENT_JOIN;
   packet.port = port_no;
   strcpy(packet.ipstr, ipstr);
 
@@ -179,8 +183,10 @@ int main(int argc, char** argv) {
     exit(2);
   }
 
-int num_clients = server_info.num_clients;
+//CONNECT TO PARENT
 
+int num_clients = server_info.num_clients;
+client_id = server_info.cid;
  client_node_t potential_clients[num_clients];
 
   //Get the client information from the connecting client node
@@ -189,23 +195,69 @@ int num_clients = server_info.num_clients;
     exit(2);
   }
 
-  for(int i = 0; i < num_clients; i++){
-    printf("port number: %d\n", (int) potential_clients[i].port);
+  //Check received data
+  printf("Received cid: %d\n", (int) client_id);
+  printf("Num parents received: %d\n", num_clients);
+  printf("PORT NUMBERS OF PARENTS: ");
+  for(int i = 0; i < num_clients; i++) {
+    printf("%d ", (int) potential_clients[i].port);
+  }
+  printf("\n");
+
+
+  if (num_clients > 1) {
+    srand(time(0));
+
+  int random = rand() % num_clients - 1;
+  size_t parent_port = potential_clients[random].port; 
+  char ipstr[INET_ADDRSTRLEN];
+  strcpy(ipstr, potential_clients[random].ipstr);
+  printf("Parent port later %zu\n", parent_port);
+
+  //Getting the host name for the server
+  struct hostent* parent_server;
+  parent_server = gethostbyname();
+  if(parent_server == NULL) {
+    fprintf(stderr, "Unable to find host %s\n", argv[2]);
+    exit(1);
   }
 
-  //print_list(&potential_parents);
+    //parent socket address
+  struct sockaddr_in addr_parent = {
+    .sin_family = AF_INET,
+    .sin_port = htons(parent_port)
+  };
 
-  /* pthread_t client_thread;
+  //Copy server address
+  bcopy((char*)parent_server->h_addr, (char*)&addr_parent.sin_addr.s_addr, parent_server->h_length);
+
+  //Create a socket for the parent
+  int s_parent = socket(AF_INET, SOCK_STREAM, 0);
+  if(s_parent == -1) {
+    perror("socket failed");
+    exit(2);
+  }
+
+  //Connect with the parent
+  if(connect(s_parent, (struct sockaddr*)&addr_parent, sizeof(struct sockaddr_in))) {
+    perror("connect failed with parent");
+    exit(2);
+    }
+  }
+
+  pthread_t client_thread;
      client_thread_args_t args_client;
-     args_client.s = s;
+     args_client.s = s_client;
 
-     //A thread to accept connections from other clients
+          //A thread to accept connections from other clients
      if(pthread_create(&client_thread, NULL, client_fn, &args_client)) {
      perror("pthread_create failed");
      exit(2);
      }
 
-     pthread_join(client_thread, NULL); */
+     pthread_join(client_thread, NULL);
+     while(true);
+
 
   // Initialize the chat client's user interface.
   /* ui_init();
