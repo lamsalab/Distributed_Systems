@@ -48,6 +48,8 @@ typedef struct packet
 typedef struct server_info
 {
   int num_clients;
+  size_t cid;
+  char ipstr[INET_ADDRSTRLEN];
 } server_info_t;
 
 int cur_num_clients = 0;  //tracks unique ids for clients
@@ -135,7 +137,8 @@ send_num_total_clients(client_socket);
 //Sends the total number of clients in the directory to the client
 void send_num_total_clients(int client_socket) {
  server_info_t server_info;
- server_info.num_clients = list_size,
+ server_info.num_clients = list_size;
+ server_info.cid = cur_num_clients;
  send(client_socket,(void *) &server_info, sizeof(server_info_t), 0);
 }
 
@@ -202,14 +205,14 @@ void print_list(client_list_t* lst) {
 */
 
 //Removes the client that wants to exit from the system
-void update_directory_server(size_t  port){
+void update_directory_server(size_t cid){
 
   client_node_t* cur = dir_list->head;
   client_node_t* prev = dir_list->head;
 
   while(cur != NULL) {
     //if we find the cid we are looking for, just change the pointers
-    if(cur->port == port) {
+    if(cur->cid == cid) {
       if(cur == dir_list->head) { 
         dir_list->head = dir_list->head->next;
       } else {
@@ -265,6 +268,8 @@ int main(int argc, char const *argv[]) {
 
   init_list();     
   int server = setup_server();
+
+  while(true) {
   int client_socket = accept_incoming_connection(server);
 
   //Get the client information from the connecting client node
@@ -280,18 +285,18 @@ int main(int argc, char const *argv[]) {
     //add client to dir list, give it potential parents to join
     append_node(create_client_node(&packet_info));
   	send_all_parents_list(client_socket);
+  	printf("Client join\n");
     break;
   case REQUEST_NEW_PEER:
-  append_node(create_client_node(&packet_info));
-  append_node(create_client_node(&packet_info));
-  append_node(create_client_node(&packet_info));
-  send_potential_parents(client_socket, 2);
+ 	send_all_parents_list(client_socket);
      break;
   case CLIENT_EXIT:
   //remove client with given port num
-  update_directory_server(packet_info.port);
+  update_directory_server(packet_info.client_id);
   break;
   } 
+  close(client_socket);
+ }
     
   close(server);
 
