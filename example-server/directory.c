@@ -10,7 +10,7 @@
 #include <arpa/inet.h>
 #include <stdio.h>
 
-#define SERVER_PORT 6666
+#define SERVER_PORT 6662
 
 //Request types
 typedef enum {
@@ -45,16 +45,9 @@ typedef struct packet
 } info_packet_t;
 
 //List of potential parents for new clients
-typedef struct parent_list
-{
-  int num_clients;
-  client_node_t* potential_clients;
-
-} parent_list_t;
-
 typedef struct server_info
 {
-	int list_size;
+  int num_clients;
 } server_info_t;
 
 int cur_num_clients = 0;  //tracks unique ids for clients
@@ -62,8 +55,9 @@ client_list_t* dir_list;
 int list_size = 0;
 
 //create parents list array
-client_node_t potential_clients[4];
+//client_node_t potential_clients[10];
 
+void send_num_total_clients(int client_socket);
 
 //Creates a new empty client node
 client_node_t* create_client_node(info_packet_t * client_packet){
@@ -75,7 +69,6 @@ client_node_t* create_client_node(info_packet_t * client_packet){
   new_node->cid = cur_num_clients++;
   new_node->port = client_packet->port;
   strcpy(new_node->ipstr, client_packet->ipstr);
-  printf("ASSIGNED CID: %d", (int) new_node->cid);
   return new_node;
 }
 
@@ -121,29 +114,75 @@ int accept_incoming_connection(int server_socket) {
 
 void send_all_parents_list(int client_socket) {
 
- //create parents list array
- //client_node_t potential_clients[3];
- memset(potential_clients, 0, sizeof(potential_clients));
+//send client expected number of clients_nodes to receive
+send_num_total_clients(client_socket);
 
- //add all the clients from linked list to this array
+//create array to send to client nodes
+ client_node_t potential_clients[list_size];
+ 
+//add all the clients from linked list to this array
  client_node_t* cur = dir_list->head;
-
  int i = 0;
  while(cur != NULL) {
  	potential_clients[i++] = *cur;
 	cur = cur->next;
  }
 
- parent_list_t parents_list;
- parents_list.num_clients = list_size,
- parents_list.potential_clients = malloc (parents_list.num_clients * sizeof(client_node_t));
- memmove(parents_list.potential_clients, &potential_clients, sizeof(potential_clients));
+ //send array of client nodes to client
+ send(client_socket,(void *) &potential_clients, sizeof(potential_clients), 0);
+} 
 
-  //Send the array to the client
-  send(client_socket,(void *) &parents_list, sizeof(parent_list_t), 0);
-
+//Sends the total number of clients in the directory to the client
+void send_num_total_clients(int client_socket) {
+ server_info_t server_info;
+ server_info.num_clients = list_size,
+ send(client_socket,(void *) &server_info, sizeof(server_info_t), 0);
 }
 
+
+//Send num possible clients i.e total num of clients whose cid is less than given cid
+int send_num_potential_parents(int client_socket, int cid) {
+int num_potential_parents = 0;
+
+//Count the number of clients whose cid is less than given cid
+client_node_t* cur = dir_list->head;
+while(cur != NULL && cur->cid < cid) {
+	 ++num_potential_parents;
+   cur = cur->next;
+}
+
+//printf("potential parents %d\n", num_potential_parents);
+
+//send num of new parents to potentially join to the requesting client
+ server_info_t server_info;
+ server_info.num_clients = num_potential_parents;
+ send(client_socket,(void *) &server_info, sizeof(server_info_t), 0);
+ return num_potential_parents;
+}
+
+//Sends an array of potential parent nodes to the requesting client
+void send_potential_parents(int client_socket, int cid) {
+
+//send requesting client the expected number of client nodes to receive
+int num_potential_parents = send_num_potential_parents(client_socket, cid);
+
+//create array of client nodes to send
+ client_node_t potential_clients[num_potential_parents];
+ 
+//add all the clients from linked list to this array
+ client_node_t* cur = dir_list->head;
+ int i = 0;
+
+ while(cur != NULL && cid < cur->cid) {
+  potential_clients[i++] = *cur;
+  cur = cur->next;
+ }
+
+ printf("potential parents %d\n", num_potential_parents);
+ //send array of client nodes to client
+// send(client_socket,(void *) &potential_clients, sizeof(potential_clients), 0);
+
+}
 
 /*
 //Prints the cids of all the clients in our list (Only for testing purposes)
@@ -163,14 +202,14 @@ void print_list(client_list_t* lst) {
 */
 
 //Removes the client that wants to exit from the system
-void update_directory_server(size_t cid){
+void update_directory_server(size_t  port){
 
   client_node_t* cur = dir_list->head;
   client_node_t* prev = dir_list->head;
 
   while(cur != NULL) {
     //if we find the cid we are looking for, just change the pointers
-    if(cur->cid == cid) {
+    if(cur->port == port) {
       if(cur == dir_list->head) { 
         dir_list->head = dir_list->head->next;
       } else {
@@ -225,8 +264,8 @@ int setup_server() {
 int main(int argc, char const *argv[]) {
 
   init_list();     
-  int s = setup_server();
-  int client_socket = accept_incoming_connection(s);
+  int server = setup_server();
+  int client_socket = accept_incoming_connection(server);
 
   //Get the client information from the connecting client node
   info_packet_t packet_info;
@@ -238,23 +277,23 @@ int main(int argc, char const *argv[]) {
   //handle the appropriate request from the client node
   switch (packet_info.request){
   case CLIENT_JOIN:
-    //Add the clients;
+    //add client to dir list, give it potential parents to join
     append_node(create_client_node(&packet_info));
-    append_node(create_client_node(&packet_info));
-    append_node(create_client_node(&packet_info));
-    append_node(create_client_node(&packet_info));
-    send_all_parents_list(client_socket);
+  	send_all_parents_list(client_socket);
     break;
   case REQUEST_NEW_PEER:
-    ;//New parents;
+  append_node(create_client_node(&packet_info));
+  append_node(create_client_node(&packet_info));
+  append_node(create_client_node(&packet_info));
+  send_potential_parents(client_socket, 2);
+     break;
   case CLIENT_EXIT:
-    ;//Update the list
+  //remove client with given port num
+  update_directory_server(packet_info.port);
+  break;
   } 
-
-  printf("I am out of switch");
-
-  //close(client_socket);      
-  //close(s);
+    
+  close(server);
 
        
   return 0; 
