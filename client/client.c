@@ -13,8 +13,7 @@
 
 #define SERVER_PORT 6662
 
- size_t client_id = 0; //default client id
-
+size_t client_id = 0; //default client id
 
 //Request types
 typedef enum {
@@ -28,7 +27,7 @@ typedef struct packet
 {
   request_t request;
   size_t client_id;
-  size_t port;
+  int port;
   char ipstr[INET_ADDRSTRLEN];
 } info_packet_t;
 
@@ -44,7 +43,7 @@ typedef struct client_node
   size_t cid;
   int client_num;
   char ipstr[INET_ADDRSTRLEN]; //holds ip address of client
-  size_t port; //holds listening port for client
+  int port; //holds listening port for client
 } client_node_t;
 
 //Client list 
@@ -62,6 +61,8 @@ typedef struct server_info
 
 
 void* client_fn(void* arg) {
+  
+
   while (1) {
     //accept an incoming connection
     client_thread_args_t* real_args = (client_thread_args_t*)arg;
@@ -71,8 +72,7 @@ void* client_fn(void* arg) {
     int client_socket = accept(s, (struct sockaddr*)&client_addr,
                                &client_addr_length);
   }
-    void * output;
-    return output;
+    return NULL;
 }
 
 //Prints the cids of all the clients in our list (Only for testing purposes)
@@ -82,7 +82,7 @@ void print_list(client_list_t* lst) {
 
   while(cur != NULL) {          
     printf("cid: %zu\n",  cur->cid);
-    printf("port: %zu\n",  cur->port);
+    printf("port: %d\n",  cur->port);
     printf("ipstr: %s\n",  cur->ipstr);
     cur = cur->next;
     }
@@ -100,7 +100,9 @@ int main(int argc, char** argv) {
   char* local_user = argv[1];
   char* server_address = argv[2];
 
-  //Determine which port this client is listening on
+/////////////////////// SETUP THIS CLIENT /////////////////////////////////////////////
+
+  //Setup a socket for this client
   int s_client = socket(AF_INET, SOCK_STREAM, 0);
   if(s_client == -1) {
     perror("socket failed");
@@ -113,28 +115,31 @@ int main(int argc, char** argv) {
     .sin_port = htons(0)
   };
 
-  
-
   //bind socket to address
   if(bind(s_client, (struct sockaddr*)&client_addr, sizeof(struct sockaddr_in))) {
     perror("bind failed");
     exit(2);
   }
 
-  printf("parent port: %d\n", client_addr.sin_port);
+   //begin listening on socket
+  if(listen(s_client, 2)) {
+    perror("listen failed");
+    exit(2);
+  }
 
   //Got the idea from https://stackoverflow.com/questions/4046616/sockets-how-to-find-out-what-port-and-address-im-assigned
   //Get the port no.
   socklen_t len = sizeof(client_addr);
-  int port_no;
-  char ipstr[INET_ADDRSTRLEN];
   if (getsockname(s_client, (struct sockaddr *)&client_addr, &len) == -1){
     perror("getsockname");
     exit(2);
   }
-  port_no = ntohs(client_addr.sin_port);
+
+  char ipstr[INET_ADDRSTRLEN]; //TODO we should not set the ip string from here, rather, this should be done on the directory
+  int port_no = ntohs(client_addr.sin_port);
   inet_ntop(AF_INET, &client_addr.sin_addr, ipstr, INET_ADDRSTRLEN);
 
+//////// SETUP CONNECTION TO DIRECTORY SERVER //////////////////////////////////////
 
   //Getting the host name for the server
   struct hostent* server;
@@ -156,7 +161,7 @@ int main(int argc, char** argv) {
     .sin_family = AF_INET,
     .sin_port = htons(SERVER_PORT)
   };
-  
+
   //Copy server address
   bcopy((char*)server->h_addr, (char*)&addr.sin_addr.s_addr, server->h_length);
 
@@ -166,11 +171,14 @@ int main(int argc, char** argv) {
     exit(2);
   }
 
+/////// SEND REQUEST TO THE DIRECTORY SERVER ////////////////////////////////////////
+
   //Packet to be sent to the server
   info_packet_t packet;
   packet.request = CLIENT_JOIN;
   packet.port = port_no;
-  strcpy(packet.ipstr, ipstr);
+
+  printf("client port no before sending: %d\n", packet.port);
 
 //Send the packet to the server
   send(s_server,(void *)&packet, sizeof(packet), 0);
@@ -183,14 +191,14 @@ int main(int argc, char** argv) {
     exit(2);
   }
 
-//CONNECT TO PARENT
+//////////// RECEIVING DATA FOR THIS CLIENT BACK FROM THE DIRECTORY SERVER ///////////
 
 int num_clients = server_info.num_clients;
 client_id = server_info.cid;
- client_node_t potential_clients[num_clients];
+client_node_t potential_clients[num_clients];
 
   //Get the client information from the connecting client node
-  if (recv(s_server, (client_node_t*) &potential_clients, sizeof(potential_clients), 0) < 0){
+  if (recv(s_server, (client_node_t*) &potential_clients, sizeof(potential_parents), 0) < 0){
     perror("There was a problem in reading the data\n");
     exit(2);
   }
@@ -198,15 +206,19 @@ client_id = server_info.cid;
   //Check received data
   printf("Received cid: %d\n", (int) client_id);
   printf("Num parents received: %d\n", num_clients);
+  
   printf("PORT NUMBERS OF PARENTS: ");
   for(int i = 0; i < num_clients; i++) {
-    printf("%d ", (int) potential_clients[i].port);
+    printf("%d ", potential_clients[i].port);
   }
   printf("\n");
 
 
   if (num_clients > 1) {
     srand(time(0));
+
+
+//////  START CONNECTING TO NEW PARENT, USING DATA RETURNED FROM DIRECTORY SERVER ///////////
 
   int random = rand() % num_clients - 1;
   size_t parent_port = potential_clients[random].port; 
@@ -222,7 +234,7 @@ client_id = server_info.cid;
     exit(1);
   }
 
-    //parent socket address
+  //parent socket address
   struct sockaddr_in addr_parent = {
     .sin_family = AF_INET,
     .sin_port = htons(parent_port)
