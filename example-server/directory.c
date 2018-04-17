@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#define SERVER_PORT 6664
+#define SERVER_PORT 6667
 
 //Request types
 typedef enum {
@@ -76,6 +76,7 @@ client_node_t* create_client_node(info_packet_t * client_packet){
   new_node->next = NULL; 
   new_node->cid = cur_num_clients++;
   new_node->port = client_packet->port;
+  printf("new client port :%d\n",new_node->port);
   return new_node;
 }
 
@@ -125,12 +126,18 @@ void send_all_parents_list(int client_socket) {
   client_node_t ret;
 
   printf("I am in send all parents\n");
+  printf("list size: %d\n", list_size);
 
   if (list_size > 1){
 
-    srand(time(0));
+printf("I am inside loop\n");
+  srand(time(0));
 
   int random = rand() % list_size -1;
+  if (random < 0){
+    random = 0;
+  }
+  printf("random %d\n", random);
 
   client_node_t* cur = dir_list->head;
 
@@ -145,9 +152,18 @@ void send_all_parents_list(int client_socket) {
     i++;
   }
 
+printf("cur port: %d\n", cur->port);
 
- ret = *cur;
-  printf("cur port: %d", cur->port);
+
+ ret.cid = cur->cid;
+ ret.client_num = cur->client_num;
+ strcpy(ret.ipstr, cur->ipstr);
+ ret.port = cur->port;
+
+ //ret = *cur;
+  printf("ret port: %d\n", ret.port);
+  printf("cur ip: %s\n", cur->ipstr);
+
 }
 
   if (list_size == 1) {
@@ -155,10 +171,12 @@ void send_all_parents_list(int client_socket) {
     ret.request = ROOT_REQUEST;
   }
 
+
   //printf("ret port: %d", ret.port);
  write(client_socket,(void *) &ret, sizeof(ret));
  //send array of client nodes to client
  //send(client_socket,(void *) potential_clients, sizeof(client_node_t) * list_size, 0);
+ close(client_socket);
 }
 
 

@@ -11,7 +11,7 @@
 
 #include "ui.h"
 
-#define SERVER_PORT 6664
+#define SERVER_PORT 6667
 
 size_t client_id = 0; //default client id
 
@@ -63,69 +63,171 @@ typedef struct server_info
 
 //List of children 
 typedef struct children_info { 
+int socket;
 size_t port; 
 char ipstr[INET_ADDRSTRLEN]; 
-children_info_t* next; 
+struct children_info * next; 
 } children_info_t; 
 
 
 //Children list 
 typedef struct children_list {
- children_info_t * head; //pointer to list of client nodes 
+ children_info_t* head; //pointer to list of child client nodes 
  } children_list_t; 
 
- pthread_mutex_t lock; 
- children_list_t * children; 
+ pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER; 
+ children_list_t* children_list; 
 
 
 
- void* child_fn(void* arg) { 
-  client_thread_args_t* real_args_child (client_thread_args_t*)arg;
-  int child_socket = real_args_child->s;
-  children_info_t child_info; 
+void init_children_lst() {
+  children_list = malloc(sizeof(children_list_t));
+  
+  if(children_list == NULL) {
+    perror("Malloc error in initializing children list");
+    exit(2);
+  }
 
-  //Get the client information from the connecting child node 
-  if (recv(child_socket, (client_node_t*) &children_info_t, sizeof(children_info_t), 0) < 0) 
-    { perror("There was a problem in reading the data\n"); 
-  exit(2); } 
+  children_list->head = NULL;
+}
 
-  pthread_mutex_lock(&lock); 
-  if (children->head == NULL) 
-    { children->head = child_info; 
-    } 
+//Creates a new empty client node
+children_info_t* create_child_node(char* ipstr, int socket, int port){
+  children_info_t* new_node = malloc (sizeof(children_info_t));
+       
+  if (new_node == NULL){
+    perror("Malloc failed in create child node!");
+    exit(2);
+  }
 
-  else { children_info_t * ptr = children->head; 
-    while (ptr->next != NULL) 
-      { ptr = ptr->next; } 
-    ptr->next = child_info; 
-  } pthread_mutex_unlock(&lock); 
-  while(true); 
+  strcpy(new_node->ipstr, ipstr);
+  new_node->socket = socket;
+  new_node->port = port;
+
+  return new_node;
 }
 
 
+
+void append_child(children_info_t* child_info) {
+
+  pthread_mutex_lock(&lock);
+ if(children_list->head == NULL) {
+    children_list->head = child_info;
+    return;
+  }
+
+  children_info_t* cur = children_list->head;
+
+  //traverse to one node before end of the list
+  while(cur->next != NULL) {
+    cur = cur->next;
+  }  
+  cur->next  = child_info;
+  pthread_mutex_unlock(&lock);
+
+
+}
+
+void send_msg_to_children(char* msg, int socket){
+  children_info_t *child = children_list->head;
+
+
+
+  printf("msg: %s\n", msg);
+
+
+
+
+  while (child != NULL){
+  // Duplicate the socket_fd so we can open it twice, once for input and once for output
+  int output_socket = dup(child->socket);
+  if(output_socket == -1) {
+    perror("dup failed");
+    exit(EXIT_FAILURE);
+  }
+  if (output_socket == socket){
+    child = child->next;
+    continue;
+  }
+  FILE* output = fdopen(output_socket, "w");
+    // Send the message to the client. Flush the buffer so the message is actually sent.
+    fprintf(output, "%s", msg);
+    fflush(output);
+
+    child = child->next;
+    close(output_socket);
+  }
+}
+
+//Thread for maintaining communication with a specific client
+ void* child_fn(void* arg) { 
+
+  client_thread_args_t* real_args_child = (client_thread_args_t*) arg;
+  int child_socket = real_args_child->s;
+  children_info_t child_info;
+  free(real_args_child); 
+
+  //pen the socket as a FILE stream so we can use fgets
+  FILE* input = fdopen(child_socket, "r");
+  //FILE* output = fdopen(child_socket_copy, "w");
+
+  // Check for errors
+  if(input == NULL) {
+    perror("fdopen failed");
+    exit(EXIT_FAILURE);
+  }
+
+
+  // Read lines until we hit the end of the input (the client disconnects)
+  char* line = NULL;
+  size_t linecap = 0;
+  while(getline(&line, &linecap, input) > 0) {
+    // Print a message on the ui
+    
+    //ui_add_message("Abyaya", line);
+    printf("in child fn %s\n",line);
+
+    pthread_mutex_lock(&lock);
+    send_msg_to_children(line, child_socket);
+    pthread_mutex_unlock(&lock);
+  }
+  return NULL;
+}
+
+
+//Thread that listens to new child clients
 void* client_fn(void* arg) {
-  
-    //accept an incoming connection
-    client_thread_args_t* real_args = (client_thread_args_t*)arg;
-    int s = real_args->s;
-    struct sockaddr_in child_addr;
-    socklen_t child_addr_length = sizeof(struct sockaddr_in);
+
+  client_thread_args_t* real_args = (client_thread_args_t*)arg;
+  int s = real_args->s;
+  free(real_args);
+
+  init_children_lst();
   
   while (1) {
+    //accept an incoming new client
+    struct sockaddr_in child_addr;
+    socklen_t child_addr_length = sizeof(struct sockaddr_in);
+    int child_socket = accept(s, (struct sockaddr*)&child_addr, &child_addr_length);
 
-    int child_socket = accept(s, (struct sockaddr*)&child_addr,
-                               &child_addr_length);
+    //Get the ip address of this incoming client
+    char ipstr[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &child_addr.sin_addr, ipstr, INET_ADDRSTRLEN);
 
+    //Add the client to our list of clients
+    append_child(create_child_node(ipstr, child_socket, child_addr.sin_port));
 
+    //create a thread that will maintain communication with this incoming client
     pthread_t child_thread;
-    client_thread_args args_child;
-    args_child.s = child_socket;
-    //A thread to accept connections from other clients
-    if(pthread_create(&child_thread, NULL, child_fn, &args_child)) {
+    client_thread_args_t* args_child = malloc(sizeof(client_thread_args_t));
+    args_child->s = child_socket;
+
+    if(pthread_create(&child_thread, NULL, child_fn, args_child)) {
       perror("pthread_create failed");
       exit(2);
     }
-    pthread_join(client_thread, NULL);
+    //pthread_join(child_thread, NULL);
 
   }
     return NULL;
@@ -234,21 +336,22 @@ int main(int argc, char** argv) {
   packet.request = CLIENT_JOIN;
   packet.port = port_no;
 
-  printf("client port no before sending: %d\n", packet.port);
+  //printf("client port no before sending: %d\n", packet.port);
 
 //Send the packet to the server
  write(s_server,(void *)&packet, sizeof(packet));
 
 client_node_t server_info;
 read(s_server, (client_node_t*) &server_info, sizeof(client_node_t));
+close(s_server);
 
 //////////// RECEIVING DATA FOR THIS CLIENT BACK FROM THE DIRECTORY SERVER ///////////
 
 client_id = server_info.cid;
 
  //Check received data
-  printf("Received cid: %d\n", (int) client_id);
-  printf("Parent port: %d\n", server_info.port);
+  //printf("Received cid: %d\n", (int) client_id);
+  //printf("Parent port: %d\n", server_info.port);
 
 
 /*  //Get the client information from the connecting client node
@@ -263,7 +366,7 @@ if (server_info.request != ROOT_REQUEST) {
   int PARENT_PORT = server_info.port;
   char ipstr[INET_ADDRSTRLEN];
   strcpy(ipstr, server_info.ipstr);
-  printf("Parent port later %d\n", PARENT_PORT); 
+  //printf("Parent port later %d\n", PARENT_PORT); 
 
   //Getting the host name for the parent server
   struct hostent* parent_server;
@@ -297,21 +400,20 @@ if (server_info.request != ROOT_REQUEST) {
     }
    }
 
+
   pthread_t client_thread;
-     client_thread_args_t args_client;
-     args_client.s = s_client;
+     client_thread_args_t* args_client = malloc(sizeof(client_thread_args_t));
+     args_client->s = s_client;
 
   //A thread to accept connections from other clients
-     if(pthread_create(&client_thread, NULL, client_fn, &args_client)) {
+     if(pthread_create(&client_thread, NULL, client_fn, args_client)) {
      perror("pthread_create failed");
      exit(2);
      }
 
-     pthread_join(client_thread, NULL);
-     while(true);
 
-
-
+  //pthread_join(client_thread, NULL);
+     
   
   // Initialize the chat client's user interface.
   ui_init();
@@ -330,6 +432,7 @@ if (server_info.request != ROOT_REQUEST) {
   } else if(strlen(message) > 0) {
   // Add the message to the UI
   ui_add_message(local_user, message);
+  send_msg_to_children(message, -725);
   }
     
   // Free the message
@@ -338,6 +441,7 @@ if (server_info.request != ROOT_REQUEST) {
   
   // Clean up the UI
   ui_shutdown();
+  
   
   return 0;
 }
