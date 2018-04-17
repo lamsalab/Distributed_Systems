@@ -61,18 +61,72 @@ typedef struct server_info
 } server_info_t;
 
 
+//List of children 
+typedef struct children_info { 
+size_t port; 
+char ipstr[INET_ADDRSTRLEN]; 
+children_info_t* next; 
+} children_info_t; 
+
+
+//Children list 
+typedef struct children_list {
+ children_info_t * head; //pointer to list of client nodes 
+ } children_list_t; 
+
+ pthread_mutex_t lock; 
+ children_list_t * children; 
+
+
+
+ void* child_fn(void* arg) { 
+  client_thread_args_t* real_args_child (client_thread_args_t*)arg;
+  int child_socket = real_args_child->s;
+  children_info_t child_info; 
+
+  //Get the client information from the connecting child node 
+  if (recv(child_socket, (client_node_t*) &children_info_t, sizeof(children_info_t), 0) < 0) 
+    { perror("There was a problem in reading the data\n"); 
+  exit(2); } 
+
+  pthread_mutex_lock(&lock); 
+  if (children->head == NULL) 
+    { children->head = child_info; 
+    } 
+
+  else { children_info_t * ptr = children->head; 
+    while (ptr->next != NULL) 
+      { ptr = ptr->next; } 
+    ptr->next = child_info; 
+  } pthread_mutex_unlock(&lock); 
+  while(true); 
+}
+
 
 void* client_fn(void* arg) {
   
-
-  while (1) {
     //accept an incoming connection
     client_thread_args_t* real_args = (client_thread_args_t*)arg;
     int s = real_args->s;
-    struct sockaddr_in client_addr;
-    socklen_t client_addr_length = sizeof(struct sockaddr_in);
-    int client_socket = accept(s, (struct sockaddr*)&client_addr,
-                               &client_addr_length);
+    struct sockaddr_in child_addr;
+    socklen_t child_addr_length = sizeof(struct sockaddr_in);
+  
+  while (1) {
+
+    int child_socket = accept(s, (struct sockaddr*)&child_addr,
+                               &child_addr_length);
+
+
+    pthread_t child_thread;
+    client_thread_args args_child;
+    args_child.s = child_socket;
+    //A thread to accept connections from other clients
+    if(pthread_create(&child_thread, NULL, child_fn, &args_child)) {
+      perror("pthread_create failed");
+      exit(2);
+    }
+    pthread_join(client_thread, NULL);
+
   }
     return NULL;
 }
@@ -175,7 +229,7 @@ int main(int argc, char** argv) {
 
 /////// SEND REQUEST TO THE DIRECTORY SERVER ////////////////////////////////////////
 
-  //Packet to be sent to the server
+  //create packet, with client info
   info_packet_t packet;
   packet.request = CLIENT_JOIN;
   packet.port = port_no;
@@ -185,16 +239,7 @@ int main(int argc, char** argv) {
 //Send the packet to the server
  write(s_server,(void *)&packet, sizeof(packet));
 
- //send(s_server,(void *)&packet, sizeof(packet), 0);
-
- client_node_t server_info;
-  //Get the client information from the connecting client node
-  
- /* if (recv(s_server, (server_info_t*) &server_info, sizeof(server_info_t), 0) < 0){
-    perror("There was a problem in reading the data\n");
-    exit(2);
-  } */
-
+client_node_t server_info;
 read(s_server, (client_node_t*) &server_info, sizeof(client_node_t));
 
 //////////// RECEIVING DATA FOR THIS CLIENT BACK FROM THE DIRECTORY SERVER ///////////
@@ -212,15 +257,15 @@ client_id = server_info.cid;
     exit(2);
   } */
 
-//////  START CONNECTING TO NEW PARENT, USING DATA RETURNED FROM DIRECTORY SERVER ///////////
+////// CONNECT TO NEW PARENT, USING DATA RETURNED FROM DIRECTORY SERVER ///////////
 
 if (server_info.request != ROOT_REQUEST) {
-   int parent_port = server_info.port;
+  int PARENT_PORT = server_info.port;
   char ipstr[INET_ADDRSTRLEN];
   strcpy(ipstr, server_info.ipstr);
-  printf("Parent port later %d\n", parent_port); 
+  printf("Parent port later %d\n", PARENT_PORT); 
 
-  //Getting the host name for the server
+  //Getting the host name for the parent server
   struct hostent* parent_server;
   parent_server = gethostbyname(ipstr);
   if(parent_server == NULL) {
@@ -228,22 +273,23 @@ if (server_info.request != ROOT_REQUEST) {
     exit(1);
   }
 
-  //parent socket address
-  struct sockaddr_in addr_parent = {
-    .sin_family = AF_INET,
-    .sin_port = htons(parent_port)
-  };
-
-  //Copy server address
-  bcopy((char*)parent_server->h_addr, (char*)&addr_parent.sin_addr.s_addr, parent_server->h_length);
-
-  //Create a socket for the parent
+ //Create a socket for the parent
   int s_parent = socket(AF_INET, SOCK_STREAM, 0);
   if(s_parent == -1) {
     perror("socket failed");
     exit(2);
   }
 
+  //initialize the socket address
+  struct sockaddr_in addr_parent = {
+    .sin_family = AF_INET,
+    .sin_port = htons(PARENT_PORT)
+  };
+
+  //Copy parent server address
+  bcopy((char*)parent_server->h_addr, (char*)&addr_parent.sin_addr.s_addr, parent_server->h_length);
+
+ 
   //Connect with the parent
   if(connect(s_parent, (struct sockaddr*)&addr_parent, sizeof(struct sockaddr_in))) {
     perror("connect failed with parent");
@@ -255,7 +301,7 @@ if (server_info.request != ROOT_REQUEST) {
      client_thread_args_t args_client;
      args_client.s = s_client;
 
-          //A thread to accept connections from other clients
+  //A thread to accept connections from other clients
      if(pthread_create(&client_thread, NULL, client_fn, &args_client)) {
      perror("pthread_create failed");
      exit(2);
@@ -265,11 +311,10 @@ if (server_info.request != ROOT_REQUEST) {
      while(true);
 
 
- 
 
-
+  
   // Initialize the chat client's user interface.
-  /* ui_init();
+  ui_init();
   
   // Add a test message
   ui_add_message(NULL, "Type your message and hit <ENTER> to post.");
@@ -292,7 +337,7 @@ if (server_info.request != ROOT_REQUEST) {
   }
   
   // Clean up the UI
-  ui_shutdown(); */
+  ui_shutdown();
   
   return 0;
 }
