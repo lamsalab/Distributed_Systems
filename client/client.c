@@ -11,7 +11,7 @@
 
 #include "ui.h"
 
-#define SERVER_PORT 6662
+#define SERVER_PORT 6663
 
 size_t client_id = 0; //default client id
 
@@ -183,22 +183,22 @@ int main(int argc, char** argv) {
 //Send the packet to the server
   send(s_server,(void *)&packet, sizeof(packet), 0);
 
- // client_node_t potential_parents[3];
  server_info_t server_info;
   //Get the client information from the connecting client node
   if (recv(s_server, (server_info_t*) &server_info, sizeof(server_info_t), 0) < 0){
     perror("There was a problem in reading the data\n");
     exit(2);
-  }
+  } 
 
 //////////// RECEIVING DATA FOR THIS CLIENT BACK FROM THE DIRECTORY SERVER ///////////
 
 int num_clients = server_info.num_clients;
-client_id = server_info.cid;
+//client_id = server_info.cid;
 client_node_t potential_clients[num_clients];
 
+  
   //Get the client information from the connecting client node
-  if (recv(s_server, (client_node_t*) &potential_clients, sizeof(potential_parents), 0) < 0){
+  if (recv(s_server, (client_node_t*) potential_clients, sizeof(client_node_t) * num_clients, 0) < 0) {
     perror("There was a problem in reading the data\n");
     exit(2);
   }
@@ -214,11 +214,11 @@ client_node_t potential_clients[num_clients];
   printf("\n");
 
 
+//////  START CONNECTING TO NEW PARENT, USING DATA RETURNED FROM DIRECTORY SERVER ///////////
+
+
   if (num_clients > 1) {
     srand(time(0));
-
-
-//////  START CONNECTING TO NEW PARENT, USING DATA RETURNED FROM DIRECTORY SERVER ///////////
 
   int random = rand() % num_clients - 1;
   size_t parent_port = potential_clients[random].port; 
