@@ -11,7 +11,7 @@
 
 #include "ui.h"
 
-#define SERVER_PORT 6663
+#define SERVER_PORT 6664
 
 size_t client_id = 0; //default client id
 
@@ -19,7 +19,8 @@ size_t client_id = 0; //default client id
 typedef enum {
   CLIENT_JOIN,
   REQUEST_NEW_PEER,
-  CLIENT_EXIT
+  CLIENT_EXIT, 
+  ROOT_REQUEST
 } request_t;
 
 //Transmission data packet
@@ -44,6 +45,7 @@ typedef struct client_node
   int client_num;
   char ipstr[INET_ADDRSTRLEN]; //holds ip address of client
   int port; //holds listening port for client
+  request_t request;
 } client_node_t;
 
 //Client list 
@@ -181,50 +183,42 @@ int main(int argc, char** argv) {
   printf("client port no before sending: %d\n", packet.port);
 
 //Send the packet to the server
-  send(s_server,(void *)&packet, sizeof(packet), 0);
+ write(s_server,(void *)&packet, sizeof(packet));
 
- server_info_t server_info;
+ //send(s_server,(void *)&packet, sizeof(packet), 0);
+
+ client_node_t server_info;
   //Get the client information from the connecting client node
-  if (recv(s_server, (server_info_t*) &server_info, sizeof(server_info_t), 0) < 0){
+  
+ /* if (recv(s_server, (server_info_t*) &server_info, sizeof(server_info_t), 0) < 0){
     perror("There was a problem in reading the data\n");
     exit(2);
-  } 
+  } */
+
+read(s_server, (client_node_t*) &server_info, sizeof(client_node_t));
 
 //////////// RECEIVING DATA FOR THIS CLIENT BACK FROM THE DIRECTORY SERVER ///////////
 
-int num_clients = server_info.num_clients;
-//client_id = server_info.cid;
-client_node_t potential_clients[num_clients];
+client_id = server_info.cid;
 
-  
-  //Get the client information from the connecting client node
+ //Check received data
+  printf("Received cid: %d\n", (int) client_id);
+  printf("Parent port: %d\n", server_info.port);
+
+
+/*  //Get the client information from the connecting client node
   if (recv(s_server, (client_node_t*) potential_clients, sizeof(client_node_t) * num_clients, 0) < 0) {
     perror("There was a problem in reading the data\n");
     exit(2);
-  }
-
-  //Check received data
-  printf("Received cid: %d\n", (int) client_id);
-  printf("Num parents received: %d\n", num_clients);
-  
-  printf("PORT NUMBERS OF PARENTS: ");
-  for(int i = 0; i < num_clients; i++) {
-    printf("%d ", potential_clients[i].port);
-  }
-  printf("\n");
-
+  } */
 
 //////  START CONNECTING TO NEW PARENT, USING DATA RETURNED FROM DIRECTORY SERVER ///////////
 
-
-  if (num_clients > 1) {
-    srand(time(0));
-
-  int random = rand() % num_clients - 1;
-  size_t parent_port = potential_clients[random].port; 
+if (server_info.request != ROOT_REQUEST) {
+   int parent_port = server_info.port;
   char ipstr[INET_ADDRSTRLEN];
-  strcpy(ipstr, potential_clients[random].ipstr);
-  printf("Parent port later %zu\n", parent_port);
+  strcpy(ipstr, server_info.ipstr);
+  printf("Parent port later %d\n", parent_port); 
 
   //Getting the host name for the server
   struct hostent* parent_server;
@@ -255,7 +249,7 @@ client_node_t potential_clients[num_clients];
     perror("connect failed with parent");
     exit(2);
     }
-  }
+   }
 
   pthread_t client_thread;
      client_thread_args_t args_client;
@@ -269,6 +263,9 @@ client_node_t potential_clients[num_clients];
 
      pthread_join(client_thread, NULL);
      while(true);
+
+
+ 
 
 
   // Initialize the chat client's user interface.
