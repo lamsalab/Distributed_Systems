@@ -9,14 +9,16 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdio.h>
+#include <time.h>
 
-#define SERVER_PORT 6663
+#define SERVER_PORT 6664
 
 //Request types
 typedef enum {
   CLIENT_JOIN,
   REQUEST_NEW_PEER,
-  CLIENT_EXIT
+  CLIENT_EXIT,
+  ROOT_REQUEST
 } request_t;
 
 //Client node
@@ -27,6 +29,7 @@ typedef struct client_node
   int client_num;
   char ipstr[INET_ADDRSTRLEN]; //holds ip address of client
   int port; //holds listening port for client
+  request_t request;
 } client_node_t;
 
 //Client list 
@@ -117,36 +120,59 @@ int accept_incoming_connection(int server_socket) {
 void send_all_parents_list(int client_socket) {
 
 //send client expected number of clients_nodes to receive
-send_num_total_clients(client_socket);
-sleep(2);
+//send_num_total_clients(client_socket);
 
-//create array to send to client nodes
- client_node_t potential_clients[list_size]; 
- 
-//add all the clients from linked list to this array
- client_node_t* cur = dir_list->head;
- int i = 0;
- while(cur != NULL) {
- 	potential_clients[i] = *cur;
-	cur = cur->next;
-	i++;
- }
+  client_node_t ret;
 
- for(int i = 0; i < list_size; i++) {
- 	printf("potential clients port num: %d\n", potential_clients[i].port);
- }
+  printf("I am in send all parents\n");
 
+  if (list_size > 1){
+
+    srand(time(0));
+
+  int random = rand() % list_size -1;
+
+  client_node_t* cur = dir_list->head;
+
+  int i = 0;
+  while(cur != NULL) {
+
+    if(i == random) {
+      break;
+    }
+
+    cur = cur->next;
+    i++;
+  }
+
+
+ ret = *cur;
+  printf("cur port: %d", cur->port);
+}
+
+  if (list_size == 1) {
+    ret = *dir_list->head;
+    ret.request = ROOT_REQUEST;
+  }
+
+  //printf("ret port: %d", ret.port);
+ write(client_socket,(void *) &ret, sizeof(ret));
  //send array of client nodes to client
- send(client_socket,(void *) potential_clients, sizeof(client_node_t) * list_size, 0);
-} 
+ //send(client_socket,(void *) potential_clients, sizeof(client_node_t) * list_size, 0);
+}
 
+
+
+/*
 //Sends the total number of clients in the directory to the client
 void send_num_total_clients(int client_socket) {
  server_info_t server_info;
  server_info.num_clients = list_size;
  server_info.cid = cur_num_clients;
- send(client_socket,(void *) &server_info, sizeof(server_info_t), 0);
+ write(client_socket,(void *) &server_info, sizeof(server_info_t));
+// send(client_socket,(void *) &server_info, sizeof(server_info_t), 0);
 }
+*/
 
 //Removes the client that wants to exit from the system
 void update_directory_server(size_t cid){
@@ -213,16 +239,18 @@ int main(int argc, char const *argv[]) {
   init_list();     
   int server = setup_server();
 
+    
   while(true) {
 
-  	struct sockaddr_in client_addr;
-  	socklen_t client_addr_length = sizeof(struct sockaddr_in);
-  	int client_socket = accept(server, (struct sockaddr*)&client_addr, &client_addr_length);
 
-  	if(client_socket == -1) {
-  		perror("accept failed");
-  		exit(2);
-  	}
+   struct sockaddr_in client_addr;
+    socklen_t client_addr_length = sizeof(struct sockaddr_in);
+    int client_socket = accept(server, (struct sockaddr*)&client_addr, &client_addr_length);
+
+    if(client_socket == -1) {
+      perror("accept failed");
+      exit(2);
+    }
 
   	//Get the ip address of the connecting client
   	struct sockaddr_in* pV4Addr = (struct sockaddr_in*)&client_addr;
@@ -233,10 +261,11 @@ int main(int argc, char const *argv[]) {
 
   //Get the rest of the info from connecting client 
   info_packet_t packet_info;
-  if (recv(client_socket, (info_packet_t*) &packet_info, sizeof(packet_info), 0) < 0){
+  read(client_socket, (info_packet_t*) &packet_info, sizeof(packet_info));
+  /*if (recv(client_socket, (info_packet_t*) &packet_info, sizeof(packet_info), 0) < 0){
     perror("There was a problem in reading the data\n");
     exit(2);
-  }
+  }*/
 
   //add the ipstr of client to the received packet info
   strcpy(packet_info.ipstr, ipstr);
@@ -245,10 +274,9 @@ int main(int argc, char const *argv[]) {
   switch (packet_info.request){
 
   case CLIENT_JOIN:
+    printf("client join");
     append_node(create_client_node(&packet_info));
-  	send_all_parents_list(client_socket);
-  	printf("Client join: IP  : %s", ipstr);
-  	printf("           : PORT: %d", (int) packet_info.port);
+    send_all_parents_list(client_socket);
     break;
 
   case REQUEST_NEW_PEER:
@@ -257,7 +285,9 @@ int main(int argc, char const *argv[]) {
 
   case CLIENT_EXIT:
   update_directory_server(packet_info.client_id);
+  break;
 
+  case ROOT_REQUEST:
   break;
   } 
 
