@@ -26,7 +26,7 @@ typedef struct client_node
   size_t cid;
   int client_num;
   char ipstr[INET_ADDRSTRLEN]; //holds ip address of client
-  size_t port; //holds listening port for client
+  int port; //holds listening port for client
 } client_node_t;
 
 //Client list 
@@ -40,7 +40,7 @@ typedef struct packet
 {
   request_t request;
   size_t client_id;  
-  size_t port;
+  int port;
   char ipstr[INET_ADDRSTRLEN];
 } info_packet_t;
 
@@ -52,31 +52,28 @@ typedef struct server_info
   char ipstr[INET_ADDRSTRLEN];
 } server_info_t;
 
+//Function signatures
+void send_num_total_clients(int client_socket);
+
 int cur_num_clients = 0;  //tracks unique ids for clients
 client_list_t* dir_list;
 int list_size = 0;
 
-//create parents list array
-//client_node_t potential_clients[10];
-
-void send_num_total_clients(int client_socket);
 
 //Creates a new empty client node
 client_node_t* create_client_node(info_packet_t * client_packet){
   client_node_t * new_node = malloc (sizeof(client_node_t));
-  new_node->next = NULL;        
+       
   if (new_node == NULL){
     perror("Malloc failed!");
+    exit(2);
   }
+
+  strcpy(new_node->ipstr, client_packet->ipstr);
+  new_node->next = NULL; 
   new_node->cid = cur_num_clients++;
   new_node->port = client_packet->port;
-  strcpy(new_node->ipstr, client_packet->ipstr);
   return new_node;
-}
-
-//List of possible parents
-client_list_t* return_list_clients(){
-  return dir_list;
 }
 
 //Appends a new client node to the end of the list
@@ -99,6 +96,7 @@ void append_node(client_node_t* node) {
   ++list_size;
 }
 
+//Accepts an incoming request on the server and returns the client socket
 int accept_incoming_connection(int server_socket) {
 
 //accept an incoming connection
@@ -114,6 +112,8 @@ int accept_incoming_connection(int server_socket) {
   return client_socket;
 }
 
+
+//Sends the list of all clients in the directory to the requesting client
 void send_all_parents_list(int client_socket) {
 
 //send client expected number of clients_nodes to receive
@@ -126,8 +126,13 @@ send_num_total_clients(client_socket);
  client_node_t* cur = dir_list->head;
  int i = 0;
  while(cur != NULL) {
- 	potential_clients[i++] = *cur;
+ 	potential_clients[i] = *cur;
 	cur = cur->next;
+	i++;
+ }
+
+ for(int i = 0; i < list_size; i++) {
+ 	printf("potential clients port num: %d\n", potential_clients[i].port);
  }
 
  //send array of client nodes to client
@@ -141,68 +146,6 @@ void send_num_total_clients(int client_socket) {
  server_info.cid = cur_num_clients;
  send(client_socket,(void *) &server_info, sizeof(server_info_t), 0);
 }
-
-
-//Send num possible clients i.e total num of clients whose cid is less than given cid
-int send_num_potential_parents(int client_socket, int cid) {
-int num_potential_parents = 0;
-
-//Count the number of clients whose cid is less than given cid
-client_node_t* cur = dir_list->head;
-while(cur != NULL && cur->cid < cid) {
-	 ++num_potential_parents;
-   cur = cur->next;
-}
-
-//printf("potential parents %d\n", num_potential_parents);
-
-//send num of new parents to potentially join to the requesting client
- server_info_t server_info;
- server_info.num_clients = num_potential_parents;
- send(client_socket,(void *) &server_info, sizeof(server_info_t), 0);
- return num_potential_parents;
-}
-
-//Sends an array of potential parent nodes to the requesting client
-void send_potential_parents(int client_socket, int cid) {
-
-//send requesting client the expected number of client nodes to receive
-int num_potential_parents = send_num_potential_parents(client_socket, cid);
-
-//create array of client nodes to send
- client_node_t potential_clients[num_potential_parents];
- 
-//add all the clients from linked list to this array
- client_node_t* cur = dir_list->head;
- int i = 0;
-
- while(cur != NULL && cid < cur->cid) {
-  potential_clients[i++] = *cur;
-  cur = cur->next;
- }
-
- printf("potential parents %d\n", num_potential_parents);
- //send array of client nodes to client
-// send(client_socket,(void *) &potential_clients, sizeof(potential_clients), 0);
-
-}
-
-/*
-//Prints the cids of all the clients in our list (Only for testing purposes)
-void print_list(client_list_t* lst) {
-
-  client_node_t* cur = lst->head;
-
-  while(cur != NULL) {          
-    printf("cid: %zu\n",  cur->cid);
-    printf("port: %zu\n",  cur->port);
-    printf("ipstr: %s\n",  cur->ipstr);
-    cur = cur->next;
-  }
-
-  return;
-}
-*/
 
 //Removes the client that wants to exit from the system
 void update_directory_server(size_t cid){
@@ -270,32 +213,54 @@ int main(int argc, char const *argv[]) {
   int server = setup_server();
 
   while(true) {
-  int client_socket = accept_incoming_connection(server);
 
-  //Get the client information from the connecting client node
+  	struct sockaddr_in client_addr;
+  	socklen_t client_addr_length = sizeof(struct sockaddr_in);
+  	int client_socket = accept(server, (struct sockaddr*)&client_addr, &client_addr_length);
+
+  	if(client_socket == -1) {
+  		perror("accept failed");
+  		exit(2);
+  	}
+
+  	//Get the ip address of the connecting client
+  	struct sockaddr_in* pV4Addr = (struct sockaddr_in*)&client_addr;
+  	struct in_addr ipAddr = pV4Addr->sin_addr;
+  	char ipstr[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &ipAddr, ipstr, INET_ADDRSTRLEN);
+
+
+  //Get the rest of the info from connecting client 
   info_packet_t packet_info;
   if (recv(client_socket, (info_packet_t*) &packet_info, sizeof(packet_info), 0) < 0){
     perror("There was a problem in reading the data\n");
     exit(2);
   }
 
+  //add the ipstr of client to the received packet info
+  strcpy(packet_info.ipstr, ipstr);
+
   //handle the appropriate request from the client node
   switch (packet_info.request){
+
   case CLIENT_JOIN:
-    //add client to dir list, give it potential parents to join
     append_node(create_client_node(&packet_info));
   	send_all_parents_list(client_socket);
-  	printf("Client join\n");
+  	printf("Client join: IP  : %s", ipstr);
+  	printf("           : PORT: %d", (int) packet_info.port);
     break;
+
   case REQUEST_NEW_PEER:
  	send_all_parents_list(client_socket);
      break;
+
   case CLIENT_EXIT:
-  //remove client with given port num
   update_directory_server(packet_info.client_id);
+
   break;
   } 
-  close(client_socket);
+
+  //close(client_socket);
  }
     
   close(server);
