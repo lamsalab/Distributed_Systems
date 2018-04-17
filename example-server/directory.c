@@ -10,7 +10,7 @@
 #include <arpa/inet.h>
 #include <stdio.h>
 
-#define SERVER_PORT 6662
+#define SERVER_PORT 6663
 
 //Request types
 typedef enum {
@@ -118,9 +118,10 @@ void send_all_parents_list(int client_socket) {
 
 //send client expected number of clients_nodes to receive
 send_num_total_clients(client_socket);
+sleep(2);
 
 //create array to send to client nodes
- client_node_t potential_clients[list_size];
+ client_node_t potential_clients[list_size]; 
  
 //add all the clients from linked list to this array
  client_node_t* cur = dir_list->head;
@@ -136,7 +137,7 @@ send_num_total_clients(client_socket);
  }
 
  //send array of client nodes to client
- send(client_socket,(void *) &potential_clients, sizeof(potential_clients), 0);
+ send(client_socket,(void *) potential_clients, sizeof(client_node_t) * list_size, 0);
 } 
 
 //Sends the total number of clients in the directory to the client
