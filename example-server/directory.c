@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#define SERVER_PORT 6667
+#define SERVER_PORT 6662
 
 //Request types
 typedef enum {
